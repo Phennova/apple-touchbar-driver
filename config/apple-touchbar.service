@@ -1,0 +1,26 @@
+[Unit]
+Description=Apple Touch Bar Driver Activation
+After=systemd-modules-load.service
+After=sys-bus-usb-drivers-usb.device
+Wants=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Load modules in dependency order
+ExecStart=/usr/bin/modprobe apple-ibridge
+ExecStart=/usr/bin/modprobe apple-ib-tb
+ExecStart=/usr/bin/modprobe apple-ib-als
+
+# Brief delay for modules to initialize, then rebind the iBridge USB device
+# The script finds the iBridge dynamically instead of hardcoding a bus address
+ExecStart=/usr/local/bin/apple-touchbar-rebind
+
+# On stop, unload in reverse order
+ExecStop=/usr/bin/modprobe -r apple-ib-als
+ExecStop=/usr/bin/modprobe -r apple-ib-tb
+ExecStop=/usr/bin/modprobe -r apple-ibridge
+
+[Install]
+WantedBy=multi-user.target

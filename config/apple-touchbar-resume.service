@@ -1,0 +1,10 @@
+[Unit]
+Description=Reactivate Apple Touch Bar after resume
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/apple-touchbar-rebind
+
+[Install]
+WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target

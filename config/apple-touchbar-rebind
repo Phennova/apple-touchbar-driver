@@ -1,0 +1,51 @@
+#!/bin/bash
+# apple-touchbar-rebind: Find and rebind the Apple iBridge USB device
+# so the apple-ibridge HID driver can claim it.
+#
+# The iBridge (T1 chip) has vendor=05ac product=8600.
+# We find its USB bus address dynamically.
+
+set -euo pipefail
+
+VENDOR="05ac"
+PRODUCT="8600"
+
+find_ibridge_busid() {
+    local dev
+    for dev in /sys/bus/usb/devices/*/idVendor; do
+        local dir
+        dir=$(dirname "$dev")
+        local busid
+        busid=$(basename "$dir")
+
+        # Skip interfaces (they contain colons like "1-3:1.0")
+        if [[ "$busid" == *:* ]]; then
+            continue
+        fi
+
+        if [[ "$(cat "$dir/idVendor" 2>/dev/null)" == "$VENDOR" ]] && \
+           [[ "$(cat "$dir/idProduct" 2>/dev/null)" == "$PRODUCT" ]]; then
+            echo "$busid"
+            return 0
+        fi
+    done
+    return 1
+}
+
+BUSID=$(find_ibridge_busid) || {
+    echo "apple-touchbar-rebind: iBridge USB device (${VENDOR}:${PRODUCT}) not found" >&2
+    exit 1
+}
+
+echo "apple-touchbar-rebind: Found iBridge at USB bus $BUSID, rebinding..."
+
+# Unbind from current driver
+echo "$BUSID" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null || true
+
+# Brief pause for clean detach
+sleep 0.5
+
+# Rebind so apple-ibridge HID driver claims it
+echo "$BUSID" > /sys/bus/usb/drivers/usb/bind
+
+echo "apple-touchbar-rebind: iBridge rebound successfully"
