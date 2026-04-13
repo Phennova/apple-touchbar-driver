@@ -34,6 +34,10 @@ The T1 chip exposes the Touch Bar as a USB device (vendor `05ac`, product `8600`
 
 The iBridge USB device is already claimed by the generic HID driver by the time userspace loads modules. The driver must be loaded, then the USB device must be **unbound and rebound** so the `apple-ibridge` HID driver can claim it. The included systemd service and rebind script handle this automatically.
 
+### The hid-sensor-hub race condition
+
+The kernel's built-in `hid-sensor-hub` driver matches HID devices with sensor usage pages. The iBridge exposes two HID interfaces — one for the keyboard/Touch Bar mode control, and one for display brightness and the ambient light sensor. Without intervention, `hid-sensor-hub` claims the second interface before `apple-ibridge` can, and the Touch Bar never activates (it needs both interfaces). The included udev rule and rebind script prevent this by evicting `hid-sensor-hub` from iBridge devices.
+
 ### Why not load via mkinitcpio/initramfs?
 
 **Do not add these modules to `MODULES` in `/etc/mkinitcpio.conf`.** Loading them in the initramfs (before USB enumeration completes) interferes with root device discovery and will prevent your system from booting. The install script checks for this and removes them if found.
@@ -238,7 +242,8 @@ apple-touchbar-driver/
 │   ├── apple-touchbar.conf           # modprobe dependency config
 │   ├── apple-touchbar.service        # systemd: load modules on boot
 │   ├── apple-touchbar-resume.service # systemd: rebind after suspend
-│   └── apple-touchbar-rebind         # script: find & rebind iBridge USB
+│   ├── apple-touchbar-rebind         # script: find & rebind iBridge USB
+│   └── 99-apple-touchbar.rules      # udev: block hid-sensor-hub on iBridge
 ├── install.sh                # One-command installer
 ├── uninstall.sh              # Clean uninstaller
 └── LICENSE                   # GPL v2

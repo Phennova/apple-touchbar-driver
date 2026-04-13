@@ -92,6 +92,11 @@ cp "$SRC_DIR/config/apple-touchbar-rebind" /usr/local/bin/apple-touchbar-rebind
 chmod 755 /usr/local/bin/apple-touchbar-rebind
 echo "  Installed /usr/local/bin/apple-touchbar-rebind"
 
+# udev rule to prevent hid-sensor-hub from stealing iBridge interfaces
+cp "$SRC_DIR/config/99-apple-touchbar.rules" /etc/udev/rules.d/99-apple-touchbar.rules
+udevadm control --reload-rules 2>/dev/null || true
+echo "  Installed /etc/udev/rules.d/99-apple-touchbar.rules"
+
 # systemd services
 cp "$SRC_DIR/config/apple-touchbar.service" /etc/systemd/system/apple-touchbar.service
 cp "$SRC_DIR/config/apple-touchbar-resume.service" /etc/systemd/system/apple-touchbar-resume.service

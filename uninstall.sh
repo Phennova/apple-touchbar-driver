@@ -35,9 +35,11 @@ rm -rf "/usr/src/${DKMS_NAME}-${DKMS_VER}"
 echo "[4/4] Removing config files..."
 rm -f /etc/modprobe.d/apple-touchbar.conf
 rm -f /usr/local/bin/apple-touchbar-rebind
+rm -f /etc/udev/rules.d/99-apple-touchbar.rules
 rm -f /etc/systemd/system/apple-touchbar.service
 rm -f /etc/systemd/system/apple-touchbar-resume.service
 systemctl daemon-reload
+udevadm control --reload-rules 2>/dev/null || true
 
 echo ""
 echo "=== Uninstall complete ==="

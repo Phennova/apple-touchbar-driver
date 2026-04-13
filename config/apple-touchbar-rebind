@@ -1,9 +1,15 @@
 #!/bin/bash
 # apple-touchbar-rebind: Find and rebind the Apple iBridge USB device
-# so the apple-ibridge HID driver can claim it.
+# so the apple-ibridge HID driver can claim ALL its HID interfaces.
 #
 # The iBridge (T1 chip) has vendor=05ac product=8600.
 # We find its USB bus address dynamically.
+#
+# Problem this solves: the built-in hid-sensor-hub driver races with
+# apple-ibridge and often steals the second HID interface (the one with
+# Touch Bar display/brightness controls). The Touch Bar driver needs
+# BOTH interfaces to activate. We unbind hid-sensor-hub from any iBridge
+# HID devices after the USB rebind so apple-ibridge can claim them.
 
 set -euo pipefail
 
@@ -32,6 +38,25 @@ find_ibridge_busid() {
     return 1
 }
 
+# Unbind any iBridge HID devices from hid-sensor-hub (and hid-generic)
+# so apple-ibridge can claim them on reprobe.
+evict_competing_drivers() {
+    local driver_path devid
+
+    for driver_path in /sys/bus/hid/drivers/hid-sensor-hub /sys/bus/hid/drivers/hid-generic; do
+        [ -d "$driver_path" ] || continue
+        local driver_name
+        driver_name=$(basename "$driver_path")
+
+        for devid in "$driver_path"/0003:05AC:8600.*; do
+            [ -e "$devid" ] || continue
+            devid=$(basename "$devid")
+            echo "apple-touchbar-rebind: Unbinding $devid from $driver_name"
+            echo "$devid" > "$driver_path/unbind" 2>/dev/null || true
+        done
+    done
+}
+
 BUSID=$(find_ibridge_busid) || {
     echo "apple-touchbar-rebind: iBridge USB device (${VENDOR}:${PRODUCT}) not found" >&2
     exit 1
@@ -39,13 +64,26 @@ BUSID=$(find_ibridge_busid) || {
 
 echo "apple-touchbar-rebind: Found iBridge at USB bus $BUSID, rebinding..."
 
-# Unbind from current driver
+# Unbind from current USB driver
 echo "$BUSID" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null || true
 
 # Brief pause for clean detach
 sleep 0.5
 
-# Rebind so apple-ibridge HID driver claims it
+# Rebind — apple-ibridge HID driver will compete with hid-sensor-hub/hid-generic
+echo "$BUSID" > /sys/bus/usb/drivers/usb/bind
+
+# Wait for HID enumeration to settle
+sleep 1
+
+# Evict hid-sensor-hub and hid-generic from any iBridge devices they grabbed
+evict_competing_drivers
+
+# Brief pause, then rebind the USB device one more time so apple-ibridge
+# can claim the now-free interfaces
+sleep 0.5
+echo "$BUSID" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null || true
+sleep 0.5
 echo "$BUSID" > /sys/bus/usb/drivers/usb/bind
 
 echo "apple-touchbar-rebind: iBridge rebound successfully"
