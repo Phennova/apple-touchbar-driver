@@ -167,35 +167,46 @@ sudo pacman -S wireplumber playerctl brightnessctl
 
 Your keyboard backlight is a separate LED device, not part of the Touch Bar driver. On **T1 MacBook Pros**, the keyboard (and its backlight) is on the SPI bus, handled by the `applespi` driver which has been part of mainline Linux since kernel 5.3 — it should just work.
 
-Find your LED device:
+**Step 1 — List every LED device on your system:**
+
+```bash
+ls /sys/class/leds/
+```
+
+You'll get output like:
+
+```
+input2::capslock  input2::numlock  spi::kbd_backlight
+```
+
+**Step 2 — Identify the keyboard backlight.** On T1 MacBooks it's named **`spi::kbd_backlight`** (verified on MacBookPro13,3). You can filter for it:
 
 ```bash
 ls /sys/class/leds/ | grep -i -E 'kbd|keyboard'
 ```
 
-Expected on T1:
-- **`spi::kbd_backlight`** ← this is the correct name on the verified MacBookPro13,3
-
 Other possibilities on different Apple hardware:
 - `smc::kbd_backlight` (older Intel Macs via `applesmc`)
 - `apple::kbd_backlight`
 
-If nothing shows up, the SPI keyboard driver may not have bound. Check `dmesg | grep applespi`. Older MacBooks may need `applesmc`:
+**Step 3 — If nothing shows up**, the SPI keyboard driver may not have bound. Check `dmesg | grep applespi`. Older MacBooks may need `applesmc`:
 
 ```bash
 sudo modprobe applesmc
 echo applesmc | sudo tee /etc/modules-load.d/applesmc.conf
 ```
 
-Test manually (replace `spi::kbd_backlight` with whatever you found):
+**Step 4 — Test the device works** (substitute whatever Step 2 found):
 
 ```bash
 # Read max value
 cat /sys/class/leds/spi::kbd_backlight/max_brightness
 
-# Turn backlight on (your max_brightness might be 255, 127, or 8 — use that)
+# Turn backlight on (use a number <= max_brightness above)
 echo 128 | sudo tee /sys/class/leds/spi::kbd_backlight/brightness
 ```
+
+**Remember your device name** — you'll put it into the compositor bindings below.
 
 ### Hyprland (Wayland)
 
@@ -341,13 +352,17 @@ sudo apple-touchbar-diagnose
 
 The keyboard backlight is NOT handled by this driver. On T1 MacBook Pros, it comes from the upstream `applespi` SPI keyboard driver.
 
-Check if the LED device exists:
+List all LED devices to find the keyboard backlight:
+
+```bash
+ls /sys/class/leds/
+```
+
+On T1 this should include **`spi::kbd_backlight`** (verified on MacBookPro13,3). To filter:
 
 ```bash
 ls /sys/class/leds/ | grep -i kbd
-```
-
-On T1 this should show **`spi::kbd_backlight`** (verified on MacBookPro13,3). If nothing appears:
+``` If nothing appears:
 
 ```bash
 # Check that applespi is loaded (it's built in on most kernels)
