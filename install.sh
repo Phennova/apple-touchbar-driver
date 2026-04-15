@@ -6,7 +6,7 @@
 set -euo pipefail
 
 DKMS_NAME="apple-touchbar"
-DKMS_VER="0.2"
+DKMS_VER="0.3"
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [[ $EUID -ne 0 ]]; then
@@ -37,10 +37,14 @@ fi
 # --- Step 2: Remove old DKMS module if present ---
 echo ""
 echo "[2/6] Checking for existing DKMS installation..."
-if dkms status "$DKMS_NAME/$DKMS_VER" 2>/dev/null | grep -q "$DKMS_NAME"; then
-    echo "  Removing old version..."
-    dkms remove "$DKMS_NAME/$DKMS_VER" --all 2>/dev/null || true
-fi
+# Remove any previous version of apple-touchbar (supports clean upgrades)
+while IFS= read -r old_ver; do
+    [ -z "$old_ver" ] && continue
+    echo "  Removing $DKMS_NAME/$old_ver..."
+    dkms remove "$DKMS_NAME/$old_ver" --all 2>/dev/null || true
+    rm -rf "/usr/src/${DKMS_NAME}-${old_ver}"
+done < <(dkms status "$DKMS_NAME" 2>/dev/null | awk -F'[/,:]' '/^'"$DKMS_NAME"'/ {print $2}' | sort -u)
+
 # Also remove the old "applespi" DKMS package if present (from Heratiki's original)
 if dkms status "applespi" 2>/dev/null | grep -q "applespi"; then
     echo "  Removing old applespi DKMS package..."

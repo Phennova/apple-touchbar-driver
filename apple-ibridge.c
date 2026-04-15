@@ -70,6 +70,25 @@
 #define USB_ID_PRODUCT_IBRIDGE	0x8600
 
 #define APPLETB_BASIC_CONFIG	1
+#define APPLETB_MAC_CONFIG	2
+
+/*
+ * When mac_mode=0 (default), the iBridge is put into USB configuration 1
+ * ("Default iBridge Interfaces") which exposes predefined Touch Bar layouts.
+ * When mac_mode=1, it is put into configuration 2 ("Default iBridge
+ * Interfaces (OS X)") which exposes the Touch Bar as a raw framebuffer via
+ * a USB AV-class interface. In mac mode, custom content can be rendered by
+ * a userspace daemon (e.g. tiny-dfr) via the appletbdrm kernel driver.
+ *
+ * In mac mode, the Touch Bar goes blank until a renderer daemon draws to it.
+ * This parameter has no effect on an already-running iBridge; you must
+ * reload the module or re-plug the device for the config change to apply.
+ */
+static bool mac_mode;
+module_param(mac_mode, bool, 0444);
+MODULE_PARM_DESC(mac_mode,
+	"Put the iBridge into USB config 2 (mac/DFR mode) for custom rendering. "
+	"Default: 0 (config 1, predefined Touch Bar layouts).");
 
 #define	LOG_DEV(ib_dev)		(&(ib_dev)->acpi_dev->dev)
 
@@ -664,14 +683,28 @@ static int appleib_hid_probe(struct hid_device *hdev,
 	struct appleib_hid_dev_info *dev_info;
 	struct usb_device *udev;
 	int rc;
+	u8 want_config;
 
 	/* check and set usb config first */
 	udev = hid_to_usb_dev(hdev);
 
-	if (udev->actconfig->desc.bConfigurationValue != APPLETB_BASIC_CONFIG) {
-		rc = usb_driver_set_configuration(udev, APPLETB_BASIC_CONFIG);
+	want_config = mac_mode ? APPLETB_MAC_CONFIG : APPLETB_BASIC_CONFIG;
+	if (udev->actconfig->desc.bConfigurationValue != want_config) {
+		hid_info(hdev, "switching iBridge to USB config %u (%s)\n",
+			 want_config, mac_mode ? "mac/DFR mode" : "basic mode");
+		rc = usb_driver_set_configuration(udev, want_config);
 		return rc ? rc : -ENODEV;
 	}
+
+	/*
+	 * In mac_mode, the HID interfaces change layout and the AV-class
+	 * framebuffer interface appears. The apple-ib-tb/apple-ib-als
+	 * sub-drivers won't find their expected fields, so they'll just
+	 * return -ENODEV from their probes. That's fine — this module's
+	 * role in mac_mode is purely to trigger the config switch; the
+	 * appletbdrm driver (separate module) handles the framebuffer,
+	 * and hid-multitouch handles the digitizer.
+	 */
 
 	ib_dev = (void *)id->driver_data;
 	hid_set_drvdata(hdev, ib_dev);

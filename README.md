@@ -62,7 +62,7 @@ The install script will:
 
 1. **Check `/etc/mkinitcpio.conf`** — removes any apple-ib modules from `MODULES` and rebuilds initramfs if needed (prevents the boot crash described above)
 2. **Remove old DKMS installations** — cleans up previous versions, including the old `applespi` DKMS package
-3. **Install DKMS source** to `/usr/src/apple-touchbar-0.2/`
+3. **Install DKMS source** to `/usr/src/apple-touchbar-<version>/`
 4. **Build kernel modules** for every installed kernel that has headers
 5. **Install config files** — modprobe dependency ordering, USB rebind script, systemd services
 6. **Enable systemd services** — auto-start on boot and reactivation after suspend/resume
@@ -151,6 +151,45 @@ sudo ./uninstall.sh
 ```
 
 This removes the DKMS modules, systemd services, config files, and the rebind script.
+
+## Level 2: Custom Rendering (experimental, in progress)
+
+Level 2 adds support for rendering **custom icons and actions** to the Touch Bar, like macOS does. Fn-hold swaps the display to F1–F12. It's being built out in increments — pull the latest commit, re-run `sudo ./install.sh`, and you'll be on the next increment.
+
+### Increment 1 — `mac_mode` config switch (CURRENT)
+
+Adds a module parameter that switches the iBridge to USB Configuration 2 ("OS X mode"), which exposes the Touch Bar as a raw framebuffer. No rendering yet — the Touch Bar will go **blank** in this mode, because Level 1's predefined layouts don't exist here. This increment exists to verify Config 2 works on your hardware before we commit to it.
+
+**To test:**
+
+```bash
+# Load the module with mac_mode=1
+sudo modprobe -r apple-ib-tb apple-ib-als apple-ibridge
+sudo modprobe apple-ibridge mac_mode=1
+sudo apple-touchbar-rebind
+
+# Verify the device is now in config 2
+lsusb -d 05ac:8600 -v 2>/dev/null | grep bConfigurationValue
+# Should show: bConfigurationValue  2
+
+# You should now see additional interfaces, including a USB class 10 (AV):
+lsusb -d 05ac:8600 -v 2>/dev/null | grep -E 'bInterfaceClass|bInterfaceNumber'
+```
+
+**To revert to Level 1:**
+
+```bash
+sudo modprobe -r apple-ib-tb apple-ib-als apple-ibridge
+sudo systemctl restart apple-touchbar.service
+```
+
+### Increment 2 — `appletbdrm-t1` kernel module (upcoming)
+
+Will vendor the mainline kernel's `appletbdrm.c` (currently only matches T2 ID `0x8302`) and patch in the T1 ID `0x8600`. Once loaded with `mac_mode=1`, a `/dev/dri/cardN` device appears for the Touch Bar and arbitrary pixels can be drawn to it.
+
+### Increment 3 — `tiny-dfr` renderer (upcoming)
+
+Installs [tiny-dfr](https://github.com/AsahiLinux/tiny-dfr) (Asahi Linux's userspace Touch Bar renderer), udev rules for the multi-touch digitizer, and a default config that reproduces F1–F12 with Fn-toggle behavior. From there you edit `/etc/tiny-dfr/config.toml` to add custom icons, labels, and key bindings.
 
 ## Troubleshooting
 
