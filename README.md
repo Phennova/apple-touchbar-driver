@@ -143,6 +143,116 @@ Edit `/etc/modprobe.d/apple-touchbar.conf` and uncomment/modify the options line
 options apple-ib-tb idle_timeout=300 dim_timeout=-2 fnmode=1
 ```
 
+## Post-Install: Make the Keys Actually Do Things
+
+Once the driver is working, the Touch Bar's special keys emit standard Linux media keycodes (`XF86AudioRaiseVolume`, `XF86MonBrightnessUp`, etc.). **But Linux does not handle media keys automatically** — your desktop environment or window manager has to bind them to actions.
+
+### Required helper tools
+
+```bash
+sudo pacman -S wireplumber playerctl brightnessctl
+```
+
+### Find your keyboard backlight LED name
+
+Your keyboard backlight is a separate LED device, not part of the Touch Bar driver. The exact sysfs name varies by model. Find it with:
+
+```bash
+ls /sys/class/leds/ | grep -i -E 'kbd|keyboard'
+```
+
+Common names:
+- `smc::kbd_backlight` (Intel Macs with `applesmc`)
+- `apple::kbd_backlight`
+- `kbd_backlight`
+
+If nothing shows up, you're missing the `applesmc` module:
+
+```bash
+sudo modprobe applesmc
+# Make it load at boot
+echo applesmc | sudo tee /etc/modules-load.d/applesmc.conf
+```
+
+Test manually (replace `smc::kbd_backlight` with whatever you found):
+
+```bash
+# Turn backlight fully on
+echo 255 | sudo tee /sys/class/leds/smc::kbd_backlight/brightness
+
+# Read max value
+cat /sys/class/leds/smc::kbd_backlight/max_brightness
+```
+
+### Hyprland (Wayland)
+
+Add to `~/.config/hypr/hyprland.conf` (replace `smc::kbd_backlight` with your actual device):
+
+```ini
+# --- Touch Bar / media key bindings ---
+# Volume
+bindel = , XF86AudioRaiseVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+bindel = , XF86AudioLowerVolume, exec, wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindl  = , XF86AudioMute,        exec, wpctl set-mute   @DEFAULT_AUDIO_SINK@ toggle
+
+# Media playback
+bindl = , XF86AudioPlay, exec, playerctl play-pause
+bindl = , XF86AudioNext, exec, playerctl next
+bindl = , XF86AudioPrev, exec, playerctl previous
+
+# Screen brightness
+bindel = , XF86MonBrightnessUp,   exec, brightnessctl set 5%+
+bindel = , XF86MonBrightnessDown, exec, brightnessctl set 5%-
+
+# Keyboard backlight (replace smc::kbd_backlight with your device name)
+bindel = , XF86KbdBrightnessUp,   exec, brightnessctl -d smc::kbd_backlight set 10%+
+bindel = , XF86KbdBrightnessDown, exec, brightnessctl -d smc::kbd_backlight set 10%-
+```
+
+Reload: `hyprctl reload`.
+
+### Sway (Wayland)
+
+Add to `~/.config/sway/config`:
+
+```
+bindsym --locked XF86AudioRaiseVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+bindsym --locked XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym --locked XF86AudioMute        exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym --locked XF86AudioPlay        exec playerctl play-pause
+bindsym --locked XF86AudioNext        exec playerctl next
+bindsym --locked XF86AudioPrev        exec playerctl previous
+bindsym --locked XF86MonBrightnessUp   exec brightnessctl set 5%+
+bindsym --locked XF86MonBrightnessDown exec brightnessctl set 5%-
+bindsym --locked XF86KbdBrightnessUp   exec brightnessctl -d smc::kbd_backlight set 10%+
+bindsym --locked XF86KbdBrightnessDown exec brightnessctl -d smc::kbd_backlight set 10%-
+```
+
+### i3 (X11)
+
+Add to `~/.config/i3/config`:
+
+```
+bindsym XF86AudioRaiseVolume exec --no-startup-id wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+bindsym XF86AudioLowerVolume exec --no-startup-id wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym XF86AudioMute        exec --no-startup-id wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym XF86AudioPlay        exec --no-startup-id playerctl play-pause
+bindsym XF86AudioNext        exec --no-startup-id playerctl next
+bindsym XF86AudioPrev        exec --no-startup-id playerctl previous
+bindsym XF86MonBrightnessUp   exec --no-startup-id brightnessctl set 5%+
+bindsym XF86MonBrightnessDown exec --no-startup-id brightnessctl set 5%-
+bindsym XF86KbdBrightnessUp   exec --no-startup-id brightnessctl -d smc::kbd_backlight set 10%+
+bindsym XF86KbdBrightnessDown exec --no-startup-id brightnessctl -d smc::kbd_backlight set 10%-
+```
+
+### GNOME / KDE Plasma
+
+Media keys work out of the box. If they don't, check the DE's keyboard settings — `XF86AudioRaiseVolume` / `XF86MonBrightnessUp` should already be bound.
+
+### Why this is needed
+
+On Wayland, keys the compositor doesn't bind "fall through" to the focused application. Terminals show unknown media keycodes as escape sequences (which looks like "439u" or similar — that's the compositor printing the keycode as raw text). Once the compositor binds the key, it's consumed before reaching any application, and the bound command actually runs.
+
 ## Uninstallation
 
 ```bash
@@ -207,6 +317,40 @@ If the rebind failed, try manually:
 ```bash
 sudo apple-touchbar-rebind
 ```
+
+For a full state dump:
+
+```bash
+sudo apple-touchbar-diagnose
+```
+
+### Keyboard backlight doesn't work
+
+The keyboard backlight is NOT handled by this driver — it's a separate LED controlled by the `applesmc` kernel module.
+
+Check if the LED device exists:
+
+```bash
+ls /sys/class/leds/ | grep -i kbd
+```
+
+If nothing appears, load `applesmc`:
+
+```bash
+sudo modprobe applesmc
+echo applesmc | sudo tee /etc/modules-load.d/applesmc.conf
+ls /sys/class/leds/  # should now show smc::kbd_backlight or similar
+```
+
+Test manually:
+
+```bash
+# Replace smc::kbd_backlight with whatever `ls` showed
+cat /sys/class/leds/smc::kbd_backlight/max_brightness
+echo 128 | sudo tee /sys/class/leds/smc::kbd_backlight/brightness
+```
+
+If that works but pressing F5/F6 on the Touch Bar does nothing, your compositor has no binding for `XF86KbdBrightnessUp` / `XF86KbdBrightnessDown` — see **Post-Install: Make the Keys Actually Do Things** above.
 
 ### Touch Bar not working after suspend/resume
 
