@@ -2,6 +2,16 @@
 
 Kernel driver and installation tooling for the Touch Bar on **T1-chip MacBook Pros** running Linux. Provides function keys, special keys (brightness, volume, etc.), Fn key toggling, idle dimming, and ambient light sensor support.
 
+## Disclaimer
+
+The installation tooling, configuration files, systemd services, diagnostic scripts, README, and all driver-code modifications in this repository were written or modified by Anthropic's **Claude** (Opus 4.6) in collaboration with the repository owner. The core kernel driver code originates from prior work by Ronald Tschalär, Heratiki, AdityaGarg8, and the t2linux community (see **Credits** at the bottom).
+
+Every fix, workaround, and installation step documented here has been **tested end-to-end on a 2016 15" MacBook Pro (MacBookPro13,3) running Arch Linux** with kernels `6.19.11-arch1-1` (mainline) and `6.18.22-1-lts`. It works on that machine at the time this was committed.
+
+Other T1 models (MacBookPro13,2, 14,2, 14,3) are architecturally identical and expected to work, but have not been independently verified here. If you test on a different model, please open an issue or PR noting the result.
+
+Use at your own risk. Kernel driver changes can brick your boot — have a recovery USB ready and read the install script before running it.
+
 ## Supported Hardware
 
 | Model | Identifier | Chip | Status |
@@ -155,38 +165,41 @@ sudo pacman -S wireplumber playerctl brightnessctl
 
 ### Find your keyboard backlight LED name
 
-Your keyboard backlight is a separate LED device, not part of the Touch Bar driver. The exact sysfs name varies by model. Find it with:
+Your keyboard backlight is a separate LED device, not part of the Touch Bar driver. On **T1 MacBook Pros**, the keyboard (and its backlight) is on the SPI bus, handled by the `applespi` driver which has been part of mainline Linux since kernel 5.3 — it should just work.
+
+Find your LED device:
 
 ```bash
 ls /sys/class/leds/ | grep -i -E 'kbd|keyboard'
 ```
 
-Common names:
-- `smc::kbd_backlight` (Intel Macs with `applesmc`)
-- `apple::kbd_backlight`
-- `kbd_backlight`
+Expected on T1:
+- **`spi::kbd_backlight`** ← this is the correct name on the verified MacBookPro13,3
 
-If nothing shows up, you're missing the `applesmc` module:
+Other possibilities on different Apple hardware:
+- `smc::kbd_backlight` (older Intel Macs via `applesmc`)
+- `apple::kbd_backlight`
+
+If nothing shows up, the SPI keyboard driver may not have bound. Check `dmesg | grep applespi`. Older MacBooks may need `applesmc`:
 
 ```bash
 sudo modprobe applesmc
-# Make it load at boot
 echo applesmc | sudo tee /etc/modules-load.d/applesmc.conf
 ```
 
-Test manually (replace `smc::kbd_backlight` with whatever you found):
+Test manually (replace `spi::kbd_backlight` with whatever you found):
 
 ```bash
-# Turn backlight fully on
-echo 255 | sudo tee /sys/class/leds/smc::kbd_backlight/brightness
-
 # Read max value
-cat /sys/class/leds/smc::kbd_backlight/max_brightness
+cat /sys/class/leds/spi::kbd_backlight/max_brightness
+
+# Turn backlight on (your max_brightness might be 255, 127, or 8 — use that)
+echo 128 | sudo tee /sys/class/leds/spi::kbd_backlight/brightness
 ```
 
 ### Hyprland (Wayland)
 
-Add to `~/.config/hypr/hyprland.conf` (replace `smc::kbd_backlight` with your actual device):
+Add to `~/.config/hypr/hyprland.conf` (on T1 the LED is `spi::kbd_backlight` — replace if yours differs):
 
 ```ini
 # --- Touch Bar / media key bindings ---
@@ -204,9 +217,9 @@ bindl = , XF86AudioPrev, exec, playerctl previous
 bindel = , XF86MonBrightnessUp,   exec, brightnessctl set 5%+
 bindel = , XF86MonBrightnessDown, exec, brightnessctl set 5%-
 
-# Keyboard backlight (replace smc::kbd_backlight with your device name)
-bindel = , XF86KbdBrightnessUp,   exec, brightnessctl -d smc::kbd_backlight set 10%+
-bindel = , XF86KbdBrightnessDown, exec, brightnessctl -d smc::kbd_backlight set 10%-
+# Keyboard backlight (T1: spi::kbd_backlight — change if your device differs)
+bindel = , XF86KbdBrightnessUp,   exec, brightnessctl -d spi::kbd_backlight set 10%+
+bindel = , XF86KbdBrightnessDown, exec, brightnessctl -d spi::kbd_backlight set 10%-
 ```
 
 Reload: `hyprctl reload`.
@@ -224,8 +237,8 @@ bindsym --locked XF86AudioNext        exec playerctl next
 bindsym --locked XF86AudioPrev        exec playerctl previous
 bindsym --locked XF86MonBrightnessUp   exec brightnessctl set 5%+
 bindsym --locked XF86MonBrightnessDown exec brightnessctl set 5%-
-bindsym --locked XF86KbdBrightnessUp   exec brightnessctl -d smc::kbd_backlight set 10%+
-bindsym --locked XF86KbdBrightnessDown exec brightnessctl -d smc::kbd_backlight set 10%-
+bindsym --locked XF86KbdBrightnessUp   exec brightnessctl -d spi::kbd_backlight set 10%+
+bindsym --locked XF86KbdBrightnessDown exec brightnessctl -d spi::kbd_backlight set 10%-
 ```
 
 ### i3 (X11)
@@ -241,8 +254,8 @@ bindsym XF86AudioNext        exec --no-startup-id playerctl next
 bindsym XF86AudioPrev        exec --no-startup-id playerctl previous
 bindsym XF86MonBrightnessUp   exec --no-startup-id brightnessctl set 5%+
 bindsym XF86MonBrightnessDown exec --no-startup-id brightnessctl set 5%-
-bindsym XF86KbdBrightnessUp   exec --no-startup-id brightnessctl -d smc::kbd_backlight set 10%+
-bindsym XF86KbdBrightnessDown exec --no-startup-id brightnessctl -d smc::kbd_backlight set 10%-
+bindsym XF86KbdBrightnessUp   exec --no-startup-id brightnessctl -d spi::kbd_backlight set 10%+
+bindsym XF86KbdBrightnessDown exec --no-startup-id brightnessctl -d spi::kbd_backlight set 10%-
 ```
 
 ### GNOME / KDE Plasma
@@ -326,7 +339,7 @@ sudo apple-touchbar-diagnose
 
 ### Keyboard backlight doesn't work
 
-The keyboard backlight is NOT handled by this driver — it's a separate LED controlled by the `applesmc` kernel module.
+The keyboard backlight is NOT handled by this driver. On T1 MacBook Pros, it comes from the upstream `applespi` SPI keyboard driver.
 
 Check if the LED device exists:
 
@@ -334,20 +347,22 @@ Check if the LED device exists:
 ls /sys/class/leds/ | grep -i kbd
 ```
 
-If nothing appears, load `applesmc`:
+On T1 this should show **`spi::kbd_backlight`** (verified on MacBookPro13,3). If nothing appears:
 
 ```bash
-sudo modprobe applesmc
-echo applesmc | sudo tee /etc/modules-load.d/applesmc.conf
-ls /sys/class/leds/  # should now show smc::kbd_backlight or similar
+# Check that applespi is loaded (it's built in on most kernels)
+lsmod | grep applespi
+dmesg | grep -i applespi
+
+# Very old MacBooks use applesmc instead
+sudo modprobe applesmc 2>/dev/null
 ```
 
 Test manually:
 
 ```bash
-# Replace smc::kbd_backlight with whatever `ls` showed
-cat /sys/class/leds/smc::kbd_backlight/max_brightness
-echo 128 | sudo tee /sys/class/leds/smc::kbd_backlight/brightness
+cat /sys/class/leds/spi::kbd_backlight/max_brightness
+echo 128 | sudo tee /sys/class/leds/spi::kbd_backlight/brightness
 ```
 
 If that works but pressing F5/F6 on the Touch Bar does nothing, your compositor has no binding for `XF86KbdBrightnessUp` / `XF86KbdBrightnessDown` — see **Post-Install: Make the Keys Actually Do Things** above.
