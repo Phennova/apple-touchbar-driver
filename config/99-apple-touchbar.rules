@@ -1,5 +1,17 @@
-# Prevent hid-sensor-hub from claiming Apple iBridge HID interfaces.
-# The apple-ibridge driver needs ALL iBridge HID interfaces to function.
-# Without this rule, hid-sensor-hub steals the display/brightness interface
-# and the Touch Bar never activates.
-ACTION=="add", SUBSYSTEM=="hid", ATTRS{idVendor}=="05ac", ATTRS{idProduct}=="8600", DRIVER=="hid-sensor-hub", RUN+="/bin/sh -c 'echo %k > /sys/bus/hid/drivers/hid-sensor-hub/unbind'"
+# Force apple-ibridge-hid to claim iBridge HID interfaces.
+#
+# The kernel's hid-sensor-hub driver races with apple-ibridge for the
+# iBridge's sensor-containing HID interface. When hid-sensor-hub wins,
+# the Touch Bar can't activate (it needs BOTH iBridge HID interfaces
+# on apple-ibridge-hid).
+#
+# This rule runs when a HID device appears: if it's an iBridge HID
+# device claimed by hid-sensor-hub or hid-generic, we unbind it and
+# bind it to apple-ibridge-hid.
+ACTION=="add", SUBSYSTEM=="hid", ATTRS{idVendor}=="05ac", ATTRS{idProduct}=="8600", \
+    DRIVER=="hid-sensor-hub", \
+    RUN+="/bin/sh -c 'echo %k > /sys/bus/hid/drivers/hid-sensor-hub/unbind; sleep 0.1; echo %k > /sys/bus/hid/drivers/apple-ibridge-hid/bind 2>/dev/null || true'"
+
+ACTION=="add", SUBSYSTEM=="hid", ATTRS{idVendor}=="05ac", ATTRS{idProduct}=="8600", \
+    DRIVER=="hid-generic", \
+    RUN+="/bin/sh -c 'echo %k > /sys/bus/hid/drivers/hid-generic/unbind; sleep 0.1; echo %k > /sys/bus/hid/drivers/apple-ibridge-hid/bind 2>/dev/null || true'"

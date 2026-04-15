@@ -451,6 +451,9 @@ static const __u8 *appleib_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 	 * instead.
 	 */
 
+	hid_info(hdev, "ib: report_fixup called, rsize=%u (expected 634 for T1 fixup)\n",
+		 *rsize);
+
 	if (*rsize == 634 &&
 	    /* Usage Page 0xff12 (vendor defined) */
 	    rdesc[212] == 0x06 && rdesc[213] == 0x12 && rdesc[214] == 0xff &&
@@ -462,7 +465,7 @@ static const __u8 *appleib_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 	    rdesc[434] == 0x95 && rdesc[435] == 1) {
 		rdesc[433] = 32;
 		rdesc[435] = 2;
-		hid_dbg(hdev, "Fixed up first 64-bit field\n");
+		hid_info(hdev, "ib: fixed up first 64-bit field\n");
 	}
 
 	if (*rsize == 634 &&
@@ -476,7 +479,7 @@ static const __u8 *appleib_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 	    rdesc[629] == 0x95 && rdesc[630] == 1) {
 		rdesc[628] = 32;
 		rdesc[630] = 2;
-		hid_dbg(hdev, "Fixed up second 64-bit field\n");
+		hid_info(hdev, "ib: fixed up second 64-bit field\n");
 	}
 
 	return rdesc;
@@ -709,9 +712,13 @@ static int appleib_hid_probe(struct hid_device *hdev,
 	ib_dev = (void *)id->driver_data;
 	hid_set_drvdata(hdev, ib_dev);
 
+	hid_info(hdev, "ib: probing HID device, parent usb iface %s\n",
+		 dev_name(hdev->dev.parent));
+
 	rc = hid_parse(hdev);
 	if (rc) {
-		hid_err(hdev, "ib: hid parse failed (%d)\n", rc);
+		hid_err(hdev, "ib: hid parse failed (%d) -- report descriptor may not match what appleib_report_fixup expects\n",
+			rc);
 		goto error;
 	}
 

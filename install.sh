@@ -6,7 +6,7 @@
 set -euo pipefail
 
 DKMS_NAME="apple-touchbar"
-DKMS_VER="0.3"
+DKMS_VER="0.4"
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [[ $EUID -ne 0 ]]; then
@@ -96,10 +96,32 @@ cp "$SRC_DIR/config/apple-touchbar-rebind" /usr/local/bin/apple-touchbar-rebind
 chmod 755 /usr/local/bin/apple-touchbar-rebind
 echo "  Installed /usr/local/bin/apple-touchbar-rebind"
 
+# Diagnostic script
+cp "$SRC_DIR/config/apple-touchbar-diagnose" /usr/local/bin/apple-touchbar-diagnose
+chmod 755 /usr/local/bin/apple-touchbar-diagnose
+echo "  Installed /usr/local/bin/apple-touchbar-diagnose"
+
 # udev rule to prevent hid-sensor-hub from stealing iBridge interfaces
 cp "$SRC_DIR/config/99-apple-touchbar.rules" /etc/udev/rules.d/99-apple-touchbar.rules
 udevadm control --reload-rules 2>/dev/null || true
 echo "  Installed /etc/udev/rules.d/99-apple-touchbar.rules"
+
+# Check for usbmuxd — its udev rules match 05ac:8600 due to historical PID
+# overlap and WILL steal the iBridge if installed and active.
+if command -v usbmuxd >/dev/null 2>&1; then
+    if systemctl is-active usbmuxd >/dev/null 2>&1; then
+        echo "  WARNING: usbmuxd is running. Its udev rules may steal the iBridge."
+        echo "           If Touch Bar doesn't activate, disable usbmuxd with:"
+        echo "             sudo systemctl disable --now usbmuxd.service"
+    fi
+    for rules_file in /usr/lib/udev/rules.d/*usbmuxd* /etc/udev/rules.d/*usbmuxd*; do
+        [ -f "$rules_file" ] || continue
+        if grep -q '8600' "$rules_file" 2>/dev/null; then
+            echo "  WARNING: $rules_file contains a match for 05ac:8600 (iBridge)."
+            echo "           This will conflict. Consider editing out the 8600 match."
+        fi
+    done
+fi
 
 # systemd services
 cp "$SRC_DIR/config/apple-touchbar.service" /etc/systemd/system/apple-touchbar.service
@@ -126,6 +148,7 @@ echo "Useful commands:"
 echo "  - Check status:    systemctl status apple-touchbar.service"
 echo "  - View logs:       journalctl -u apple-touchbar.service"
 echo "  - Manual rebind:   sudo apple-touchbar-rebind"
+echo "  - Diagnostic dump: sudo apple-touchbar-diagnose"
 echo "  - Change fn mode:  echo 1 | sudo tee /sys/class/platform/apple-ib-tb.0/fnmode"
 echo "    (0=fkeys, 1=fn-switches, 2=inverse, 3=special-only)"
 echo "  - Idle timeout:    echo 300 | sudo tee /sys/class/platform/apple-ib-tb.0/idle_timeout"

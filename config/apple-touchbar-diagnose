@@ -1,0 +1,111 @@
+#!/bin/bash
+# apple-touchbar-diagnose: dump all state relevant to Touch Bar activation.
+# Run with: sudo apple-touchbar-diagnose
+# Paste the output into an issue report if things aren't working.
+
+echo "=== Apple Touch Bar Diagnostic ==="
+echo "Date: $(date)"
+echo "Kernel: $(uname -r)"
+echo "Model: $(sudo dmidecode -s system-product-name 2>/dev/null || echo '(dmidecode not available)')"
+echo ""
+
+echo "--- Loaded modules ---"
+lsmod | grep -E '^(apple_ibridge|apple_ib_tb|apple_ib_als|hid_sensor_hub|hid_generic|hid_multitouch|appletbdrm|usbmuxd)\b' || echo "(none of the relevant modules loaded)"
+echo ""
+
+echo "--- Module parameters ---"
+for mod in apple_ibridge apple_ib_tb; do
+    if [ -d "/sys/module/$mod/parameters" ]; then
+        echo "[$mod]"
+        for p in /sys/module/$mod/parameters/*; do
+            echo "  $(basename "$p") = $(cat "$p" 2>/dev/null)"
+        done
+    fi
+done
+echo ""
+
+echo "--- iBridge USB device ---"
+found=0
+for dev in /sys/bus/usb/devices/*/idVendor; do
+    dir=$(dirname "$dev")
+    busid=$(basename "$dir")
+    [[ "$busid" == *:* ]] && continue
+    if [[ "$(cat "$dir/idVendor" 2>/dev/null)" == "05ac" ]] && \
+       [[ "$(cat "$dir/idProduct" 2>/dev/null)" == "8600" ]]; then
+        found=1
+        echo "Bus ID: $busid"
+        echo "  bConfigurationValue: $(cat "$dir/bConfigurationValue")"
+        echo "  bNumConfigurations:  $(cat "$dir/bNumConfigurations")"
+        echo "  Interfaces:"
+        for iface in "$dir"/${busid}:*; do
+            [ -d "$iface" ] || continue
+            iface_num=$(basename "$iface")
+            cls=$(cat "$iface/bInterfaceClass" 2>/dev/null)
+            drv_link=$(readlink "$iface/driver" 2>/dev/null)
+            drv=$([ -n "$drv_link" ] && basename "$drv_link" || echo "<unbound>")
+            echo "    $iface_num  class=0x$cls  driver=$drv"
+        done
+    fi
+done
+[ "$found" = "0" ] && echo "ERROR: iBridge (05ac:8600) USB device not found"
+echo ""
+
+echo "--- iBridge HID devices ---"
+hid_found=0
+for hid_dir in /sys/bus/hid/devices/0003:05AC:8600.*; do
+    [ -d "$hid_dir" ] || continue
+    hid_found=1
+    devid=$(basename "$hid_dir")
+    drv_link=$(readlink "$hid_dir/driver" 2>/dev/null)
+    drv=$([ -n "$drv_link" ] && basename "$drv_link" || echo "<unbound>")
+    rdesc_size=$(stat -c '%s' "/sys/kernel/debug/hid/$devid/rdesc" 2>/dev/null || echo '?')
+    echo "  $devid  driver=$drv  rdesc_size=$rdesc_size"
+done
+[ "$hid_found" = "0" ] && echo "(no iBridge HID devices found -- driver probably failed to bind)"
+echo ""
+
+echo "--- ACPI device APP7777 ---"
+if [ -d /sys/bus/acpi/devices/APP7777:00 ]; then
+    echo "  Present: /sys/bus/acpi/devices/APP7777:00"
+    echo "  status: $(cat /sys/bus/acpi/devices/APP7777:00/status 2>/dev/null || echo '?')"
+else
+    echo "  NOT FOUND -- apple-ibridge cannot probe without this"
+fi
+echo ""
+
+echo "--- Platform devices ---"
+for dev in /sys/bus/platform/devices/apple-ib-tb* /sys/bus/platform/devices/apple-ib-als*; do
+    [ -e "$dev" ] || continue
+    echo "  $(basename "$dev")"
+done
+echo ""
+
+echo "--- systemd services ---"
+for svc in apple-touchbar.service apple-touchbar-resume.service; do
+    state=$(systemctl is-active "$svc" 2>/dev/null || echo 'unknown')
+    echo "  $svc: $state"
+done
+echo ""
+
+echo "--- usbmuxd check (known to steal 05ac:8600) ---"
+if command -v usbmuxd >/dev/null 2>&1; then
+    echo "  usbmuxd INSTALLED"
+    if systemctl is-active usbmuxd >/dev/null 2>&1; then
+        echo "  usbmuxd RUNNING -- this may be stealing the iBridge"
+    fi
+    for rules in /usr/lib/udev/rules.d/*usbmuxd* /etc/udev/rules.d/*usbmuxd*; do
+        [ -f "$rules" ] || continue
+        if grep -q '8600' "$rules" 2>/dev/null; then
+            echo "  WARNING: $rules matches 05ac:8600"
+        fi
+    done
+else
+    echo "  usbmuxd not installed (good)"
+fi
+echo ""
+
+echo "--- Recent dmesg (apple/ibridge/touchbar lines only) ---"
+dmesg --time-format iso 2>/dev/null | grep -iE 'apple|ibridge|touch[_ -]?bar|APP7777|SOCW' | tail -40
+echo ""
+
+echo "--- End of diagnostic ---"

@@ -918,16 +918,23 @@ static int appletb_fill_report_info(struct appletb_device *tb_dev,
 	struct appletb_report_info *report_info = NULL;
 	struct usb_interface *usb_iface;
 	struct hid_field *field;
+	const char *role = "none";
 
 	field = appleib_find_hid_field(hdev, HID_GD_KEYBOARD, HID_USAGE_MODE);
 	if (field) {
 		report_info = &tb_dev->mode_info;
+		role = "mode";
 	} else {
 		field = appleib_find_hid_field(hdev, HID_USAGE_APPLE_APP,
 					       HID_USAGE_DISP);
-		if (field)
+		if (field) {
 			report_info = &tb_dev->disp_info;
+			role = "display";
+		}
 	}
+
+	hid_info(hdev, "tb: fill_report_info: role=%s (mode_info.hdev=%p disp_info.hdev=%p)\n",
+		 role, tb_dev->mode_info.hdev, tb_dev->disp_info.hdev);
 
 	if (!report_info)
 		return 0;
@@ -1010,6 +1017,7 @@ static int appletb_probe(struct hid_device *hdev,
 
 	/* do setup if we have both interfaces */
 	if (tb_dev->mode_info.hdev && tb_dev->disp_info.hdev) {
+		hid_info(hdev, "tb: both HID interfaces present, activating Touch Bar\n");
 		/* mark active */
 		appletb_mark_active(tb_dev, true);
 
@@ -1053,7 +1061,10 @@ static int appletb_probe(struct hid_device *hdev,
 			goto unreg_handler;
 		}
 
-		dev_dbg(tb_dev->log_dev, "Touchbar activated\n");
+		dev_info(tb_dev->log_dev, "tb: Touch Bar activated\n");
+	} else {
+		hid_info(hdev, "tb: waiting for other HID interface (mode_info.hdev=%p disp_info.hdev=%p)\n",
+			 tb_dev->mode_info.hdev, tb_dev->disp_info.hdev);
 	}
 
 	return 0;
