@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Phennova
+#
 # install.sh - Install Apple Touch Bar driver for T1 MacBook Pro on Arch Linux
 #
 # Prerequisites: dkms, linux-headers (for your running kernel)
