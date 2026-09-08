@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Phennova
+#
 # uninstall.sh - Remove Apple Touch Bar driver
 set -euo pipefail
 
