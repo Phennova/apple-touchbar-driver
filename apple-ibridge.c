@@ -5,8 +5,8 @@
  * Copyright (c) 2018 Ronald Tschalär
  * Copyright (c) 2026 Phennova
  *
- * Modified 2026 by Phennova: kernel 6.11+ API compatibility fixes,
- * hid-sensor-hub bind-conflict handling, mac_mode config-2 switch.
+ * Modified 2026 by Phennova: kernel 6.11+ API compatibility, mac_mode
+ * module parameter for config-2 selection, explicit driver bind handling.
  */
 
 /**
