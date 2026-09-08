@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Phennova
+#
 # apple-touchbar-diagnose: dump all state relevant to Touch Bar activation.
 # Run with: sudo apple-touchbar-diagnose
 # Paste the output into an issue report if things aren't working.
