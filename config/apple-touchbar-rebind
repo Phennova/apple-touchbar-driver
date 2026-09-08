@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Phennova
+#
 # apple-touchbar-rebind: Force apple-ibridge-hid to bind ALL iBridge HID
 # interfaces, regardless of which other driver (hid-sensor-hub, hid-generic,
 # etc.) tried to claim them first.
