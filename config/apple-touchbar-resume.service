@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Phennova
+
 [Unit]
 Description=Reactivate Apple Touch Bar after resume
 After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
