@@ -3,6 +3,10 @@
  * Apple iBridge Driver
  *
  * Copyright (c) 2018 Ronald Tschalär
+ * Copyright (c) 2026 Phennova
+ *
+ * Modified 2026 by Phennova: struct and interface changes for the
+ * kernel 6.11+ port.
  */
 
 #ifndef __LINUX_MFD_APPLE_IBRDIGE_H
