@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2026 Phennova
+
 obj-m += apple-ibridge.o
 obj-m += apple-ib-tb.o
 obj-m += apple-ib-als.o
